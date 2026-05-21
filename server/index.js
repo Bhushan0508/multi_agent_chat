@@ -10,6 +10,10 @@ const AIOrchestrator = require('./src/services/AIOrchestrator');
 const AdapterManager = require('./src/adapters/AdapterManager');
 const AgentMemoryService = require('./src/services/AgentMemoryService');
 const SearchService = require('./src/services/SearchService');
+const ProfileService = require('./src/services/ProfileService');
+const MemoryStoreService = require('./src/services/MemoryStoreService');
+const ReminderService = require('./src/services/ReminderService');
+const SecretaryContextService = require('./src/services/SecretaryContextService');
 const multer = require('multer');
 const { OpenAI } = require('openai');
 const fs = require('fs');
@@ -88,8 +92,163 @@ app.get('/api/memory/:agentName', async (req, res) => {
    }
 });
 
+// ---- Profile / Personal Dashboard endpoints ----
+const ensureReady = (res) => {
+    if (!profileService) {
+        res.status(503).json({ error: 'Services initializing, try again' });
+        return false;
+    }
+    return true;
+};
+
+app.get('/api/profile', async (req, res) => {
+    if (!ensureReady(res)) return;
+    try { res.json(await profileService.getProfile()); }
+    catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.put('/api/profile', async (req, res) => {
+    if (!ensureReady(res)) return;
+    try {
+        const updated = await profileService.updateIdentity(req.body || {});
+        io.emit('profile_updated', updated);
+        res.json(updated);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/profile/photo', upload.single('photo'), async (req, res) => {
+    if (!ensureReady(res)) return;
+    try {
+        if (!req.file) return res.status(400).json({ error: 'No photo uploaded' });
+        const photoUrl = `/uploads/${req.file.filename}`;
+        await profileService.updateIdentity({ photo_url: photoUrl });
+        io.emit('profile_updated', await profileService.getProfile());
+        res.json({ photo_url: photoUrl });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/profile/attributes', async (req, res) => {
+    if (!ensureReady(res)) return;
+    try { res.json(await profileService.listAttributes(req.query.category)); }
+    catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/profile/attributes', async (req, res) => {
+    if (!ensureReady(res)) return;
+    try {
+        const attr = await profileService.addAttribute(req.body || {});
+        io.emit('profile_updated');
+        res.json(attr);
+    } catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+app.put('/api/profile/attributes/:id', async (req, res) => {
+    if (!ensureReady(res)) return;
+    try {
+        const attr = await profileService.updateAttribute(Number(req.params.id), req.body || {});
+        io.emit('profile_updated');
+        res.json(attr);
+    } catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+app.delete('/api/profile/attributes/:id', async (req, res) => {
+    if (!ensureReady(res)) return;
+    try {
+        await profileService.deleteAttribute(Number(req.params.id));
+        io.emit('profile_updated');
+        res.json({ ok: true });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/memories', async (req, res) => {
+    if (!ensureReady(res)) return;
+    try { res.json(await memoryStore.list({ tag: req.query.tag })); }
+    catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/memories', async (req, res) => {
+    if (!ensureReady(res)) return;
+    try {
+        const m = await memoryStore.add(req.body || {});
+        io.emit('memories_changed');
+        res.json(m);
+    } catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+app.put('/api/memories/:id', async (req, res) => {
+    if (!ensureReady(res)) return;
+    try {
+        const m = await memoryStore.update(Number(req.params.id), req.body || {});
+        io.emit('memories_changed');
+        res.json(m);
+    } catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+app.delete('/api/memories/:id', async (req, res) => {
+    if (!ensureReady(res)) return;
+    try {
+        await memoryStore.delete(Number(req.params.id));
+        io.emit('memories_changed');
+        res.json({ ok: true });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/reminders', async (req, res) => {
+    if (!ensureReady(res)) return;
+    try { res.json(await reminderService.list({ upcoming: req.query.upcoming === 'true' })); }
+    catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/reminders', async (req, res) => {
+    if (!ensureReady(res)) return;
+    try {
+        const r = await reminderService.add(req.body || {});
+        io.emit('reminders_changed');
+        res.json(r);
+    } catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+app.put('/api/reminders/:id', async (req, res) => {
+    if (!ensureReady(res)) return;
+    try {
+        const r = await reminderService.update(Number(req.params.id), req.body || {});
+        io.emit('reminders_changed');
+        res.json(r);
+    } catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+app.delete('/api/reminders/:id', async (req, res) => {
+    if (!ensureReady(res)) return;
+    try {
+        await reminderService.delete(Number(req.params.id));
+        io.emit('reminders_changed');
+        res.json({ ok: true });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/secretary/context', async (req, res) => {
+    if (!ensureReady(res)) return;
+    try { res.json(await secretaryContext.buildPreamble({ slice: req.query.slice || 'full' })); }
+    catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/secretary/daily-brief', async (req, res) => {
+    if (!ensureReady(res)) return;
+    try { res.json(await secretaryContext.getOrGenerateDailyBrief()); }
+    catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/pinned-chats', async (req, res) => {
+    if (!ensureReady(res)) return;
+    try {
+        const rows = await app.locals.db.all('SELECT agent_id, position FROM pinned_chats ORDER BY position ASC');
+        res.json(rows);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // Initialize Services
 let agentService, orchestrator, adapterManager, memoryService;
+let profileService, memoryStore, reminderService, secretaryContext;
 
 async function init() {
     const db = await setupDatabase();
@@ -97,6 +256,11 @@ async function init() {
     adapterManager = new AdapterManager();
     memoryService = new AgentMemoryService();
     orchestrator = new AIOrchestrator(agentService, adapterManager, memoryService);
+    profileService = new ProfileService(db);
+    memoryStore = new MemoryStoreService(db);
+    reminderService = new ReminderService(db);
+    secretaryContext = new SecretaryContextService(db, profileService, memoryStore, reminderService);
+    app.locals.db = db;
     console.log('Services initialized');
 }
 

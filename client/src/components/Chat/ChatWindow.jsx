@@ -4,6 +4,7 @@ import {
   Smile, Image as ImageIcon, FileText, X, User, Square
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import DailyBriefCard from './DailyBriefCard';
 
 const ChatWindow = ({ activeChat, messages, onSendMessage, isTyping, agentStatuses }) => {
   const [input, setInput] = useState('');
@@ -117,8 +118,9 @@ const ChatWindow = ({ activeChat, messages, onSendMessage, isTyping, agentStatus
 
       {/* Messages Area */}
       <main className="z-10 flex-1 overflow-y-auto p-4 md:p-8 flex flex-col gap-3 custom-scrollbar">
+        {activeChat?.id === 'personal-secretary' && <DailyBriefCard />}
         <div className="flex-1"></div>
-        
+
         <AnimatePresence>
           {messages.map((m, i) => (
             <motion.div
