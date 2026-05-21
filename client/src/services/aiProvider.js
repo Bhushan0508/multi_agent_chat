@@ -68,8 +68,9 @@ export const aiProvider = {
     });
 
     if (!response.ok) {
-      if (response.status === 404) throw new Error(`Model '${model}' not found in Ollama.`);
-      throw new Error(`Ollama error: ${response.statusText}`);
+      const errorBody = await response.json().catch(() => ({}));
+      if (response.status === 404) throw new Error(`Model '${model}' not found in Ollama. Pull it with: ollama pull ${model}`);
+      throw new Error(`Ollama error: ${errorBody.error || response.statusText}`);
     }
 
     const data = await response.json();

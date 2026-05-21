@@ -63,20 +63,25 @@ function App() {
         // Only fetch models for dropdown if we are on Ollama
         if (settings.activeProviderId === 'ollama') {
           const models = await ollama.listModels();
-          setAvailableModels(models);
-          
-          // Auto-Repair: If default model is missing, pick the first available one
-          if (models.length > 0 && (!settings.general.defaultModelId || !models.includes(settings.general.defaultModelId))) {
+          // Exclude embedding-only models from chat model list
+          const chatModels = models.filter(m => !m.toLowerCase().includes('embed'));
+          setAvailableModels(chatModels);
+
+          // Auto-Repair: If default model is missing or is an embed model, pick the first chat model
+          const currentDefault = settings.general.defaultModelId;
+          const isValidDefault = currentDefault && chatModels.includes(currentDefault);
+          if (chatModels.length > 0 && !isValidDefault) {
+            const bestModel = chatModels[0];
             const updatedSettings = {
               ...settings,
               general: {
                 ...settings.general,
-                defaultModelId: models[0]
+                defaultModelId: bestModel
               }
             };
             setSettings(updatedSettings);
             storage.saveSettings(updatedSettings);
-            console.log(`Auto-selected available model: ${models[0]}`);
+            console.log(`Auto-selected available model: ${bestModel}`);
           }
         }
       } else {
