@@ -7,12 +7,14 @@ import AgentModal from './components/Modals/AgentModal';
 import GroupModal from './components/Modals/GroupModal';
 import ConfirmModal from './components/Modals/ConfirmModal';
 import SettingsModal from './components/Modals/SettingsModal';
+import ProfileHub from './components/Profile/ProfileHub';
 import { storage } from './services/storage';
 import { orchestrator } from './services/orchestrator';
 import { ollama } from './services/ollama';
 
 function App() {
   const [activeTab, setActiveTab] = useState('chats');
+  const [activeView, setActiveView] = useState('chat'); // 'chat' | 'profile'
   const [activeChat, setActiveChat] = useState(null);
   const [messages, setMessages] = useState([]);
   const [agents, setAgents] = useState([]);
@@ -51,9 +53,12 @@ function App() {
     setGroups(storage.getGroups());
     setUser(storage.getProfile());
 
-    // Default selection: Personal Secretary
+    // Default selection: restore last chat if any, else Personal Secretary.
     const secretary = initialAgents.find(a => a.id === 'personal-secretary');
-    if (secretary) setActiveChat(secretary);
+    const lastChatId = localStorage.getItem('wa_last_active_chat_id');
+    const lastChat = lastChatId ? initialAgents.find(a => a.id === lastChatId) : null;
+    if (lastChat) setActiveChat(lastChat);
+    else if (secretary) setActiveChat(secretary);
 
     // Ollama Heartbeat (only if ollama active or we want to show its status)
     const checkOllama = async () => {
@@ -63,20 +68,25 @@ function App() {
         // Only fetch models for dropdown if we are on Ollama
         if (settings.activeProviderId === 'ollama') {
           const models = await ollama.listModels();
-          setAvailableModels(models);
-          
-          // Auto-Repair: If default model is missing, pick the first available one
-          if (models.length > 0 && (!settings.general.defaultModelId || !models.includes(settings.general.defaultModelId))) {
+          // Exclude embedding-only models from chat model list
+          const chatModels = models.filter(m => !m.toLowerCase().includes('embed'));
+          setAvailableModels(chatModels);
+
+          // Auto-Repair: If default model is missing or is an embed model, pick the first chat model
+          const currentDefault = settings.general.defaultModelId;
+          const isValidDefault = currentDefault && chatModels.includes(currentDefault);
+          if (chatModels.length > 0 && !isValidDefault) {
+            const bestModel = chatModels[0];
             const updatedSettings = {
               ...settings,
               general: {
                 ...settings.general,
-                defaultModelId: models[0]
+                defaultModelId: bestModel
               }
             };
             setSettings(updatedSettings);
             storage.saveSettings(updatedSettings);
-            console.log(`Auto-selected available model: ${models[0]}`);
+            console.log(`Auto-selected available model: ${bestModel}`);
           }
         }
       } else {
@@ -90,6 +100,9 @@ function App() {
   }, [settings.activeProviderId]);
 
   useEffect(() => {
+    if (activeChat?.id) {
+      localStorage.setItem('wa_last_active_chat_id', activeChat.id);
+    }
     if (activeChat) {
       const chatSessions = storage.getSessions(activeChat.id);
       setSessions(chatSessions);
@@ -216,6 +229,10 @@ function App() {
   };
 
   const handleDeleteAgent = (agentId) => {
+    if (agentId === 'personal-secretary') {
+      console.warn('Personal Secretary cannot be deleted (pinned system agent).');
+      return;
+    }
     const agent = agents.find(a => a.id === agentId);
     setConfirmState({
       isOpen: true,
@@ -334,60 +351,77 @@ function App() {
 
   return (
     <div className={`flex h-screen bg-wa-bg text-wa-text-primary font-wa overflow-hidden ${settings.general.darkMode ? 'dark' : ''}`}>
-      <ActivityBar 
-        activeTab={activeTab} 
-        setActiveTab={setActiveTab} 
+      <ActivityBar
+        activeTab={activeTab}
+        setActiveTab={(t) => { setActiveTab(t); setActiveView('chat'); }}
         darkMode={settings.general.darkMode}
         toggleTheme={() => handleSaveSettings({ ...settings, general: { ...settings.general, darkMode: !settings.general.darkMode }})}
         user={user}
         ollamaStatus={ollamaStatus}
         onOpenSettings={() => setIsSettingsModalOpen(true)}
+        onOpenProfile={() => setActiveView('profile')}
         onOpenSecretary={() => {
           const secretary = agents.find(a => a.id === 'personal-secretary');
           if (secretary) {
             setActiveChat(secretary);
             setActiveTab('chats');
+            setActiveView('chat');
           }
         }}
+        activeView={activeView}
       />
       
-      <ChatList 
-        activeTab={activeTab} 
-        activeChatId={activeChat?.id}
-        onSelectChat={(item) => setActiveChat({ ...item, isGroup: activeTab === 'groups' })}
-        chats={agents}
-        groups={groups}
-        onAddNew={handleAddNew}
-        onDeleteItem={(id, type) => {
-          if (type === 'group') {
-            handleDeleteGroup(id);
-          } else {
-            handleDeleteAgent(id);
-          }
-        }}
-      />
+      {activeView === 'profile' ? (
+        <ProfileHub
+          onClose={() => {
+            setActiveView('chat');
+            const secretary = agents.find(a => a.id === 'personal-secretary');
+            if (secretary) setActiveChat(secretary);
+            orchestrator.invalidatePreambleCache?.();
+          }}
+          onOpenSettings={() => setIsSettingsModalOpen(true)}
+        />
+      ) : (
+        <>
+          <ChatList
+            activeTab={activeTab}
+            activeChatId={activeChat?.id}
+            onSelectChat={(item) => setActiveChat({ ...item, isGroup: activeTab === 'groups' })}
+            chats={agents}
+            groups={groups}
+            onAddNew={handleAddNew}
+            onDeleteItem={(id, type) => {
+              if (type === 'group') {
+                handleDeleteGroup(id);
+              } else {
+                handleDeleteAgent(id);
+              }
+            }}
+          />
 
-      <ChatWindow 
-        activeChat={activeChat} 
-        messages={messages} 
-        onSendMessage={handleSendMessage}
-        isTyping={isTyping}
-      />
+          <ChatWindow
+            activeChat={activeChat}
+            messages={messages}
+            onSendMessage={handleSendMessage}
+            isTyping={isTyping}
+          />
 
-      <ContextPanel 
-        activeChat={activeChat} 
-        agents={activeChat?.isGroup ? agents.filter(a => a.groupId === activeChat.id) : agents.filter(a => a.id === activeChat?.id)}
-        sessions={sessions}
-        activeSessionId={activeSessionId}
-        onSelectSession={handleSelectSession}
-        onNewChat={handleNewChat}
-        onDeleteSession={handleDeleteSession}
-        onEditAgent={(agent) => { setEditingAgent(agent); setIsAgentModalOpen(true); }}
-        onDeleteAgent={handleDeleteAgent}
-        onEditGroup={(group) => { setEditingGroup(group); setIsGroupModalOpen(true); }}
-        onDeleteGroup={handleDeleteGroup}
-        onAddAgentToGroup={handleAddAgentToGroup}
-      />
+          <ContextPanel
+            activeChat={activeChat}
+            agents={activeChat?.isGroup ? agents.filter(a => a.groupId === activeChat.id) : agents.filter(a => a.id === activeChat?.id)}
+            sessions={sessions}
+            activeSessionId={activeSessionId}
+            onSelectSession={handleSelectSession}
+            onNewChat={handleNewChat}
+            onDeleteSession={handleDeleteSession}
+            onEditAgent={(agent) => { setEditingAgent(agent); setIsAgentModalOpen(true); }}
+            onDeleteAgent={handleDeleteAgent}
+            onEditGroup={(group) => { setEditingGroup(group); setIsGroupModalOpen(true); }}
+            onDeleteGroup={handleDeleteGroup}
+            onAddAgentToGroup={handleAddAgentToGroup}
+          />
+        </>
+      )}
 
       <AgentModal 
         isOpen={isAgentModalOpen} 

@@ -4,7 +4,7 @@ import {
   Moon, Sun, User, LogOut 
 } from 'lucide-react';
 
-const ActivityBar = ({ activeTab, setActiveTab, darkMode, toggleTheme, user, ollamaStatus, onOpenSettings, onOpenSecretary }) => {
+const ActivityBar = ({ activeTab, setActiveTab, darkMode, toggleTheme, user, ollamaStatus, onOpenSettings, onOpenProfile, onOpenSecretary, activeView }) => {
   const tabs = [
     { id: 'chats', icon: MessageSquare, label: 'Chats' },
     { id: 'groups', icon: Users, label: 'Groups' },
@@ -14,16 +14,28 @@ const ActivityBar = ({ activeTab, setActiveTab, darkMode, toggleTheme, user, oll
   return (
     <div className="w-[64px] flex-shrink-0 bg-wa-sidebar border-r border-white/5 flex flex-col items-center py-4 justify-between z-50">
       <div className="flex flex-col gap-6 items-center">
-        <div 
-          onClick={onOpenSecretary}
-          className="w-10 h-10 rounded-full bg-wa-panel flex items-center justify-center cursor-pointer hover:bg-wa-panel/80 transition-all overflow-hidden border border-white/10 group shadow-lg active:scale-95"
-          title="Personal Secretary"
+        <div
+          onClick={onOpenProfile}
+          className={`w-10 h-10 rounded-full flex items-center justify-center cursor-pointer transition-all overflow-hidden border group shadow-lg active:scale-95 ${
+            activeView === 'profile'
+              ? 'bg-wa-accent/10 border-wa-accent/40 ring-2 ring-wa-accent/30'
+              : 'bg-wa-panel border-white/10 hover:bg-wa-panel/80'
+          }`}
+          title="Your Profile Hub"
         >
           {user.avatar ? (
             <img src={user.avatar} alt="Profile" className="w-full h-full object-cover" />
           ) : (
             <User size={20} className="text-wa-accent" />
           )}
+        </div>
+
+        <div
+          onClick={onOpenSecretary}
+          className="text-[9px] uppercase tracking-wider font-bold text-wa-text-secondary hover:text-wa-accent cursor-pointer transition-colors -mt-3"
+          title="Go to Personal Secretary"
+        >
+          Sec
         </div>
         
         <div className="flex flex-col gap-4">

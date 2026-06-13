@@ -1,0 +1,20 @@
+# Render Blueprint for the multiagent-chat backend (Node/Express + socket.io + SQLite).
+# Deploy: push this repo to GitHub, then in Render -> New -> Blueprint, pick the repo.
+#
+# NOTE: the free plan has NO persistent disk, so the SQLite DB and uploads/ reset
+# on every redeploy/restart. Fine for a demo. For durable data, upgrade the
+# service to a paid plan and attach a disk mounted at /opt/render/project/src/server.
+services:
+  - type: web
+    name: multiagent-chat-server
+    runtime: node
+    rootDir: server
+    plan: free
+    buildCommand: npm install
+    startCommand: node index.js
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      # Optional: only needed for real voice transcription (OpenAI Whisper).
+      - key: OPENAI_API_KEY
+        sync: false

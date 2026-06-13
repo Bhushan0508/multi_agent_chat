@@ -4,6 +4,8 @@ import {
   Smile, Image as ImageIcon, FileText, X, User, Square
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import DailyBriefCard from './DailyBriefCard';
+import { API_BASE } from '../../config';
 
 const ChatWindow = ({ activeChat, messages, onSendMessage, isTyping, agentStatuses }) => {
   const [input, setInput] = useState('');
@@ -50,7 +52,7 @@ const ChatWindow = ({ activeChat, messages, onSendMessage, isTyping, agentStatus
           const formData = new FormData();
           formData.append('audio', audioBlob, 'record.webm');
           
-          const res = await fetch('http://localhost:5000/api/transcribe', {
+          const res = await fetch(`${API_BASE}/api/transcribe`, {
             method: 'POST',
             body: formData,
           });
@@ -117,8 +119,9 @@ const ChatWindow = ({ activeChat, messages, onSendMessage, isTyping, agentStatus
 
       {/* Messages Area */}
       <main className="z-10 flex-1 overflow-y-auto p-4 md:p-8 flex flex-col gap-3 custom-scrollbar">
+        {activeChat?.id === 'personal-secretary' && <DailyBriefCard />}
         <div className="flex-1"></div>
-        
+
         <AnimatePresence>
           {messages.map((m, i) => (
             <motion.div

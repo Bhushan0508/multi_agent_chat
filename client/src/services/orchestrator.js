@@ -1,10 +1,36 @@
 import { aiProvider } from './aiProvider';
 import { storage } from './storage';
+import { profileApi } from './profileApi';
+import { API_BASE } from '../config';
 
 export class Orchestrator {
   constructor() {
     this.agents = storage.getAgents();
     this.currentContext = []; // Simplified memory
+    this._preambleCache = { value: '', fetchedAt: 0 };
+  }
+
+  async getProfilePreamble(slice = 'full') {
+    const now = Date.now();
+    if (now - this._preambleCache.fetchedAt < 30 * 1000 && this._preambleCache.slice === slice) {
+      return this._preambleCache.value;
+    }
+    try {
+      const controller = new AbortController();
+      const t = setTimeout(() => controller.abort(), 1500);
+      const res = await fetch(`${API_BASE}/api/secretary/context?slice=${slice}`, { signal: controller.signal });
+      clearTimeout(t);
+      if (!res.ok) return '';
+      const data = await res.json();
+      this._preambleCache = { value: data.preamble || '', slice, fetchedAt: now };
+      return this._preambleCache.value;
+    } catch {
+      return '';
+    }
+  }
+
+  invalidatePreambleCache() {
+    this._preambleCache = { value: '', fetchedAt: 0 };
   }
 
   async route(query, mode = 'main', targetId = null, providerConfig) {
@@ -15,7 +41,7 @@ export class Orchestrator {
       isSearch = true;
       const actualQuery = query.replace('[SEARCH]', '').trim();
       try {
-        const res = await fetch(`http://localhost:5000/api/search?q=${encodeURIComponent(actualQuery)}`);
+        const res = await fetch(`${API_BASE}/api/search?q=${encodeURIComponent(actualQuery)}`);
         const data = await res.json();
         if (data.result) {
           processedQuery = `[Real-Time Web Context: ${data.result}]\n\nPlease answer the user's query utilizing the real-time context above if helpful.\nUser Query: ${actualQuery}`;
@@ -91,12 +117,15 @@ export class Orchestrator {
 
   async getAgentResponse(agent, query, providerConfig, defaultModelId) {
     const model = agent.model === 'default' || !agent.model ? defaultModelId : agent.model;
-    
+
+    const slice = agent.role === 'secretary' ? 'full' : 'trim';
+    const profilePreamble = await this.getProfilePreamble(slice);
+
     let historyContext = "";
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 1500); // 1.5s timeout for memory fetch
-      const memRes = await fetch(`http://localhost:5000/api/memory/${encodeURIComponent(agent.name)}`, {
+      const memRes = await fetch(`${API_BASE}/api/memory/${encodeURIComponent(agent.name)}`, {
           signal: controller.signal
       });
       clearTimeout(timeoutId);
@@ -113,15 +142,16 @@ export class Orchestrator {
       console.warn("Memory backend not reachable or timed out, using stateless mode.");
     }
 
-    const prompt = `${agent.system_prompt}\n\n${historyContext}User: ${query}\n\nAgent:`;
+    const profileBlock = profilePreamble ? `${profilePreamble}\n` : '';
+    const prompt = `${agent.system_prompt}\n\n${profileBlock}${historyContext}User: ${query}\n\nAgent:`;
     const response = await aiProvider.generate(prompt, model, providerConfig);
 
     // Save back to memory asynchronously
     try {
-      fetch(`http://localhost:5000/api/memory/${encodeURIComponent(agent.name)}`, { 
+      fetch(`${API_BASE}/api/memory/${encodeURIComponent(agent.name)}`, { 
         method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ role: 'user', content: query })
       }).catch(()=>{});
-      fetch(`http://localhost:5000/api/memory/${encodeURIComponent(agent.name)}`, { 
+      fetch(`${API_BASE}/api/memory/${encodeURIComponent(agent.name)}`, { 
         method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ role: 'assistant', content: response })
       }).catch(()=>{});
     } catch (e) {}
@@ -132,15 +162,17 @@ export class Orchestrator {
   async getSecretaryResponse(secretary, originalQuery, agentResponses, providerConfig, defaultModelId) {
     const model = secretary.model === 'default' || !secretary.model ? defaultModelId : secretary.model;
     const context = agentResponses.map(r => `${r.agent}: ${r.content}`).join('\n\n');
-    const prompt = `${secretary.system_prompt}\n\nThe user asked: "${originalQuery}"\n\nExisting Agent Responses:\n${context}\n\nPlease summarize these responses and provide a unified feedback. Start with "According to the experts..."`;
+    const profilePreamble = await this.getProfilePreamble('full');
+    const profileBlock = profilePreamble ? `${profilePreamble}\n` : '';
+    const prompt = `${secretary.system_prompt}\n\n${profileBlock}The user asked: "${originalQuery}"\n\nExisting Agent Responses:\n${context}\n\nPlease summarize these responses and provide a unified, personalized response that takes the user's profile into account. Start with "According to the experts..."`;
     
     const response = await aiProvider.generate(prompt, model, providerConfig);
     
     try {
-      fetch(`http://localhost:5000/api/memory/${encodeURIComponent(secretary.name)}`, { 
+      fetch(`${API_BASE}/api/memory/${encodeURIComponent(secretary.name)}`, { 
         method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ role: 'user', content: originalQuery })
       }).catch(()=>{});
-      fetch(`http://localhost:5000/api/memory/${encodeURIComponent(secretary.name)}`, { 
+      fetch(`${API_BASE}/api/memory/${encodeURIComponent(secretary.name)}`, { 
         method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ role: 'assistant', content: response })
       }).catch(()=>{});
     } catch (e) {}

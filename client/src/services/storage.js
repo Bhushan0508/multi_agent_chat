@@ -149,7 +149,7 @@ const INITIAL_SETTINGS = {
   general: {
     darkMode: true,
     temperature: 0.7,
-    defaultModelId: 'llama3'
+    defaultModelId: ''
   }
 };
 
@@ -223,7 +223,12 @@ export const storage = {
   },
   getSettings: () => {
     const data = localStorage.getItem(STORAGE_KEYS.SETTINGS);
-    return data ? JSON.parse(data) : INITIAL_SETTINGS;
+    const settings = data ? JSON.parse(data) : INITIAL_SETTINGS;
+    // Clear embed-only models that were accidentally saved as default chat model
+    if (settings.general?.defaultModelId?.toLowerCase().includes('embed')) {
+      settings.general.defaultModelId = '';
+    }
+    return settings;
   },
   saveSettings: (settings) => {
     localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
