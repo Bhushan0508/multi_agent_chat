@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import DailyBriefCard from './DailyBriefCard';
+import { API_BASE } from '../../config';
 
 const ChatWindow = ({ activeChat, messages, onSendMessage, isTyping, agentStatuses }) => {
   const [input, setInput] = useState('');
@@ -51,7 +52,7 @@ const ChatWindow = ({ activeChat, messages, onSendMessage, isTyping, agentStatus
           const formData = new FormData();
           formData.append('audio', audioBlob, 'record.webm');
           
-          const res = await fetch('http://localhost:5000/api/transcribe', {
+          const res = await fetch(`${API_BASE}/api/transcribe`, {
             method: 'POST',
             body: formData,
           });

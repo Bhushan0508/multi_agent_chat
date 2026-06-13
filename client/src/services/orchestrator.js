@@ -1,6 +1,7 @@
 import { aiProvider } from './aiProvider';
 import { storage } from './storage';
 import { profileApi } from './profileApi';
+import { API_BASE } from '../config';
 
 export class Orchestrator {
   constructor() {
@@ -17,7 +18,7 @@ export class Orchestrator {
     try {
       const controller = new AbortController();
       const t = setTimeout(() => controller.abort(), 1500);
-      const res = await fetch(`http://localhost:5000/api/secretary/context?slice=${slice}`, { signal: controller.signal });
+      const res = await fetch(`${API_BASE}/api/secretary/context?slice=${slice}`, { signal: controller.signal });
       clearTimeout(t);
       if (!res.ok) return '';
       const data = await res.json();
@@ -40,7 +41,7 @@ export class Orchestrator {
       isSearch = true;
       const actualQuery = query.replace('[SEARCH]', '').trim();
       try {
-        const res = await fetch(`http://localhost:5000/api/search?q=${encodeURIComponent(actualQuery)}`);
+        const res = await fetch(`${API_BASE}/api/search?q=${encodeURIComponent(actualQuery)}`);
         const data = await res.json();
         if (data.result) {
           processedQuery = `[Real-Time Web Context: ${data.result}]\n\nPlease answer the user's query utilizing the real-time context above if helpful.\nUser Query: ${actualQuery}`;
@@ -124,7 +125,7 @@ export class Orchestrator {
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 1500); // 1.5s timeout for memory fetch
-      const memRes = await fetch(`http://localhost:5000/api/memory/${encodeURIComponent(agent.name)}`, {
+      const memRes = await fetch(`${API_BASE}/api/memory/${encodeURIComponent(agent.name)}`, {
           signal: controller.signal
       });
       clearTimeout(timeoutId);
@@ -147,10 +148,10 @@ export class Orchestrator {
 
     // Save back to memory asynchronously
     try {
-      fetch(`http://localhost:5000/api/memory/${encodeURIComponent(agent.name)}`, { 
+      fetch(`${API_BASE}/api/memory/${encodeURIComponent(agent.name)}`, { 
         method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ role: 'user', content: query })
       }).catch(()=>{});
-      fetch(`http://localhost:5000/api/memory/${encodeURIComponent(agent.name)}`, { 
+      fetch(`${API_BASE}/api/memory/${encodeURIComponent(agent.name)}`, { 
         method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ role: 'assistant', content: response })
       }).catch(()=>{});
     } catch (e) {}
@@ -168,10 +169,10 @@ export class Orchestrator {
     const response = await aiProvider.generate(prompt, model, providerConfig);
     
     try {
-      fetch(`http://localhost:5000/api/memory/${encodeURIComponent(secretary.name)}`, { 
+      fetch(`${API_BASE}/api/memory/${encodeURIComponent(secretary.name)}`, { 
         method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ role: 'user', content: originalQuery })
       }).catch(()=>{});
-      fetch(`http://localhost:5000/api/memory/${encodeURIComponent(secretary.name)}`, { 
+      fetch(`${API_BASE}/api/memory/${encodeURIComponent(secretary.name)}`, { 
         method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ role: 'assistant', content: response })
       }).catch(()=>{});
     } catch (e) {}

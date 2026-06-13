@@ -5,6 +5,7 @@ import {
   Plus, Trash2, Edit2, Check, X, Upload
 } from 'lucide-react';
 import { profileApi } from '../../services/profileApi';
+import { API_BASE } from '../../config';
 
 const TABS = [
   { id: 'identity', label: 'Identity', icon: User },
@@ -283,7 +284,7 @@ const ProfileHub = ({ onClose, onOpenSettings }) => {
           <label className="relative cursor-pointer group">
             <div className="w-16 h-16 rounded-full bg-gradient-to-br from-wa-accent to-emerald-900 flex items-center justify-center overflow-hidden border-2 border-white/10">
               {profile.photo_url ? (
-                <img src={`http://localhost:5000${profile.photo_url}`} alt="" className="w-full h-full object-cover" />
+                <img src={`${API_BASE}${profile.photo_url}`} alt="" className="w-full h-full object-cover" />
               ) : (
                 <User size={28} className="text-white" />
               )}
