@@ -148,6 +148,15 @@ export const aiProvider = {
         return (data.data || []).map(m => m.id);
       }
 
+      // Google Gemini — list models that support text generation.
+      if (providerId === 'google') {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
+        const data = await response.json();
+        return (data.models || [])
+          .filter(m => (m.supportedGenerationMethods || []).includes('generateContent'))
+          .map(m => m.name.replace(/^models\//, ''));
+      }
+
       return [];
     } catch (e) {
       console.error(`Failed to list models for ${providerId}:`, e);
